@@ -4,6 +4,7 @@ export const INDICATIVE_DISCLAIMER =
 export const FALLBACK_SCENARIOS = [
   {
     call_id: "CALL-2026-0891",
+    audio_url: "/samples/panic_victim.wav",
     timestamp_ms: 1761286800000,
     caller_tag: "Distressed Victim / Active Digital Arrest Extortion",
     urgency_score: 94,
@@ -52,6 +53,7 @@ export const FALLBACK_SCENARIOS = [
   },
   {
     call_id: "CALL-2026-0893",
+    audio_url: "/samples/angry_caller.wav",
     timestamp_ms: 1761286920000,
     caller_tag: "Distressed Sextortion Victim / Acute Intimidation Crisis",
     urgency_score: 91,
@@ -99,6 +101,7 @@ export const FALLBACK_SCENARIOS = [
   },
   {
     call_id: "CALL-2026-0892",
+    audio_url: "/samples/nervous_caller.wav",
     timestamp_ms: 1761286860000,
     caller_tag: "Active Financial Drain Victim / Remote APK Takeover",
     urgency_score: 83,

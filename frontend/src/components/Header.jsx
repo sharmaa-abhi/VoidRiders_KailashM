@@ -1,5 +1,19 @@
-import React from 'react';
-import { ShieldAlert, Settings, Radio, Sun, Moon, ToggleLeft, ToggleRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  ShieldAlert,
+  Settings,
+  Radio,
+  Sun,
+  Moon,
+  ToggleLeft,
+  ToggleRight,
+  Home,
+  UserCheck,
+  Clock,
+  Activity,
+  AudioWaveform,
+  Cpu
+} from 'lucide-react';
 
 export default function Header({
   isMockMode,
@@ -8,89 +22,157 @@ export default function Header({
   provider,
   backendConnected,
   theme,
-  setTheme
+  setTheme,
+  onOpenHome
 }) {
+  const [currentDateTime, setCurrentDateTime] = useState('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const options = {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      };
+      // e.g. "06 Nov 2026, 16:18:04"
+      const formatted = now.toLocaleDateString('en-GB', options);
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      setCurrentDateTime(`${formatted} (${tz.split('/').pop() || 'LOCAL'})`);
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(nextTheme);
   };
 
   return (
-    <header className="bg-white/95 dark:bg-[#0b0f17]/95 backdrop-blur border-b border-slate-200 dark:border-[#1e293b] px-3 sm:px-6 py-2.5 sticky top-0 z-40 transition-colors select-none">
-      <div className="max-w-[1680px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
-        {/* Brand identity */}
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-[#131d2e] border border-slate-700 dark:border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-sm shrink-0">
-            <Radio className="w-4 h-4 animate-pulse text-cyan-400" />
+    <header className="bg-[#FAF9F5]/95 dark:bg-[#111923]/95 backdrop-blur border-b border-[#E2DDD3] dark:border-[#1E293B] px-4 sm:px-8 py-3.5 sticky top-0 z-30 transition-colors select-none">
+      <div className="max-w-[1720px] mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        {/* Left Section: Page Heading & Acoustic Motif */}
+        <div className="flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-lg bg-[#111923] dark:bg-[#182333] border border-[#B18B56]/50 flex items-center justify-center text-[#55B7AE] shadow-sm shrink-0">
+            <AudioWaveform className="w-5 h-5 text-[#55B7AE] animate-pulse" />
           </div>
 
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                VECNA<span className="text-cyan-600 dark:text-cyan-400 font-bold">-Pulse</span>
-              </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                Triage Station
+            <div className="flex items-center gap-2.5">
+              <h1 className="font-serif text-lg sm:text-xl font-bold tracking-tight text-[#111923] dark:text-[#F1EFE8]">
+                Voice Intelligence Command Center
+              </h1>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-[#FAF9F5] dark:bg-[#182333] text-[#477F7C] dark:text-[#55B7AE] border border-[#E2DDD3] dark:border-[#223043] font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#55B7AE] animate-ping" />
+                ACTIVE DESK
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Emergency Call Analysis & Response Coordination
+            <p className="text-xs text-[#647078] dark:text-[#9AA6AC] flex items-center gap-1.5 font-sans">
+              <span>Triage</span>
+              <span className="text-[#B18B56]">·</span>
+              <span>Analyze</span>
+              <span className="text-[#B18B56]">·</span>
+              <span>Coordinate</span>
             </p>
           </div>
         </div>
 
-        {/* Advisory legal notice */}
-        <div className="hidden md:flex items-center gap-2 bg-slate-100 dark:bg-[#151d2c] border border-amber-500/25 px-3 py-1 rounded-full text-xs text-amber-800 dark:text-amber-300 max-w-xl">
-          <ShieldAlert className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-          <span className="text-[11px] leading-tight font-medium">
-            Triage Advisory: Automated vocal cues assist response queueing. Verification required.
-          </span>
-        </div>
+        {/* Center / Right Section: Live Telemetry & System Status */}
+        <div className="flex items-center gap-3 flex-wrap justify-between md:justify-end w-full md:w-auto">
+          {/* Live Clock Strip */}
+          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-[11px] font-mono text-[#55636B] dark:text-[#9AA6AC]">
+            <Clock size={12} className="text-[#B18B56]" />
+            <span>{currentDateTime || 'Synchronizing clock...'}</span>
+          </div>
 
-        {/* System & Hardware controls */}
-        <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
-          {/* Theme Toggle (Dark / Light) */}
-          <button
-            onClick={toggleTheme}
-            className="flex items-center justify-center w-8 h-8 rounded-md bg-slate-100 dark:bg-[#131b26] border border-slate-200 dark:border-[#27354a] text-slate-700 dark:text-slate-200 hover:border-cyan-500/60 transition-colors"
-            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} theme`}
-          >
-            {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-amber-400" />
-            ) : (
-              <Moon className="w-4 h-4 text-slate-600" />
-            )}
-          </button>
+          {/* Operator Duty Pill */}
+          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-[11px] font-mono text-[#55636B] dark:text-[#9AA6AC]">
+            <UserCheck size={12} className="text-[#477F7C] dark:text-[#55B7AE]" />
+            <span>OP-VECNA-74</span>
+          </div>
 
-          {/* Demo Mode Toggle */}
-          <button
-            onClick={() => setIsMockMode(!isMockMode)}
-            className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
-              isMockMode
-                ? 'bg-purple-100 dark:bg-purple-950/40 border-purple-300 dark:border-purple-600/70 text-purple-800 dark:text-purple-200'
-                : 'bg-slate-100 dark:bg-[#131b26] border-slate-200 dark:border-[#27354a] text-slate-700 dark:text-slate-300 hover:border-slate-400'
+          {/* Service status indicator */}
+          <div
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-mono border transition-colors ${
+              backendConnected
+                ? 'bg-[#EBF7F2] dark:bg-[#132A22]/50 border-[#A3D9C5] dark:border-[#1E5743] text-[#1E7452] dark:text-[#6EE7B7]'
+                : 'bg-[#FFF9EE] dark:bg-[#251E13]/50 border-[#F0D59D] dark:border-[#5C451E] text-[#9A6715] dark:text-[#FCD34D]'
             }`}
-            title="Toggle pre-loaded demo calls on or off"
+            title={backendConnected ? 'Backend hybrid pipeline active' : 'Pure in-browser Web Audio DSP active'}
           >
-            <span className="text-[11px] font-medium">Demo Mode</span>
-            {isMockMode ? (
-              <ToggleRight className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            ) : (
-              <ToggleLeft className="w-4 h-4 text-slate-400" />
-            )}
-          </button>
-
-          {/* Provider / BYOK settings */}
-          <button
-            onClick={onOpenSettings}
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-slate-100 dark:bg-[#131b26] border border-slate-200 dark:border-[#27354a] text-slate-700 dark:text-slate-200 hover:border-slate-400 transition-colors"
-            title="Configure inference provider and API credentials"
-          >
-            <Settings className="w-3.5 h-3.5 text-slate-500" />
-            <span className="capitalize text-[11px]">
-              {provider === 'offline' ? 'Local' : provider}
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                backendConnected ? 'bg-[#10B981]' : 'bg-[#F59E0B]'
+              }`}
+            />
+            <span className="text-[11px] font-medium">
+              {backendConnected ? 'Analysis Online' : 'Local DSP Mode'}
             </span>
-          </button>
+          </div>
+
+          {/* Controls Cluster */}
+          <div className="flex items-center gap-1.5">
+            {/* Demo Mode Toggle */}
+            <button
+              onClick={() => setIsMockMode(!isMockMode)}
+              className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-all ${
+                isMockMode
+                  ? 'bg-[#FAF3E8] dark:bg-[#261E14] border-[#B18B56] text-[#8C6B3A] dark:text-[#DFBA82] font-semibold'
+                  : 'bg-[#F1EFE8] dark:bg-[#182333] border-[#E2DDD3] dark:border-[#223043] text-[#55636B] dark:text-[#9AA6AC] hover:border-[#B18B56]'
+              }`}
+              title="Toggle demo scenarios vs user live session calls"
+            >
+              <span className="text-[11px] font-mono">Demo Mode</span>
+              {isMockMode ? (
+                <ToggleRight className="w-4 h-4 text-[#B18B56]" />
+              ) : (
+                <ToggleLeft className="w-4 h-4 text-[#8C969E]" />
+              )}
+            </button>
+
+            {/* Provider Settings */}
+            <button
+              onClick={onOpenSettings}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-[#55636B] dark:text-[#9AA6AC] hover:border-[#477F7C] transition-colors"
+              title="Configure AI & Inference Providers"
+            >
+              <Settings className="w-3.5 h-3.5 text-[#477F7C] dark:text-[#55B7AE]" />
+              <span className="capitalize text-[11px] font-mono hidden sm:inline">
+                {provider === 'offline' ? 'Local' : provider}
+              </span>
+            </button>
+
+            {/* Theme Toggle */}
+            <button
+              onClick={toggleTheme}
+              className="flex items-center justify-center w-8 h-8 rounded-md bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-[#55636B] dark:text-[#9AA6AC] hover:border-[#B18B56] transition-colors"
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} theme`}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-[#B18B56]" />
+              ) : (
+                <Moon className="w-4 h-4 text-[#477F7C]" />
+              )}
+            </button>
+
+            {/* Return to Home / Landing Page */}
+            {onOpenHome && (
+              <button
+                onClick={onOpenHome}
+                className="flex items-center justify-center w-8 h-8 rounded-md bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-[#55636B] dark:text-[#9AA6AC] hover:border-[#477F7C] transition-colors"
+                title="Return to Presentation Homepage"
+              >
+                <Home className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </header>
