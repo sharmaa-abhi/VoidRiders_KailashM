@@ -4,7 +4,7 @@
  * with ZERO backend required on low-end machines.
  */
 
-import { INDICATIVE_DISCLAIMER } from '../mockData';
+import { INDICATIVE_DISCLAIMER } from '../mockData.js';
 
 const THREAT_KEYWORDS = {
   suicide: 98,
@@ -35,6 +35,21 @@ const THREAT_KEYWORDS = {
   unauthorized: 75,
   'mule account': 65,
   'freeze account': 80,
+  // Hinglish & Indic cybercrime phrases:
+  'paise kat gaye': 88,
+  'paise deduct ho gaye': 88,
+  'digital arrest bol rahe hain': 94,
+  'police bol rahi hai': 80,
+  'screen share karwaya': 85,
+  'app download karne ko bola': 85,
+  'otp bataya tha': 90,
+  'otp maang rahe hain': 90,
+  'video call band mat karo': 92,
+  trai: 80,
+  'mumbai police': 85,
+  'cyber crime branch': 85,
+  fedex: 75,
+  'narcotics control bureau': 85,
 };
 
 /**
@@ -191,6 +206,262 @@ export function clientDetectThreats(text) {
 /**
  * Pure JS Emotion & Urgency Fusion
  */
+/**
+ * Pure JS Cybercrime Entity Extraction
+ * Extracts stolen amount, beneficiary mule UPI, UTR/reference number,
+ * remote access tool & session, impersonated agency, and caller phone.
+ */
+export function extractCyberEntities(text) {
+  if (!text || typeof text !== 'string') {
+    return {
+      amount: null,
+      mule_upi: null,
+      utr_number: null,
+      remote_apk: null,
+      impersonated_agency: null,
+      caller_phone: null,
+    };
+  }
+
+  // 1. Amount Extraction
+  let amount = null;
+  const currRegex1 = /(?:₹|rs\.?|inr)\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{2})?|\d+(?:\.\d+)?)\s*(lakh|crore|thousand|k)?/i;
+  const currRegex2 = /(\d{1,3}(?:,\d{2,3})*(?:\.\d{2})?|\d+(?:\.\d+)?)\s*(lakh|crore|thousand|k)?\s*(?:rupees|inr|rs\.?)/i;
+  const currRegex3 = /(?:transfer(?:red)?|deducted|stolen|paid|demanding|extortion|loss|kat gaye|deduct ho gaye)\s*(?:of)?\s*(?:₹|rs\.?|inr)?\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{2})?|\d+)/i;
+
+  const m1 = text.match(currRegex1);
+  const m2 = text.match(currRegex2);
+  const m3 = text.match(currRegex3);
+
+  if (m1) {
+    const val = m1[1].trim();
+    const suffix = m1[2] ? ` ${m1[2].trim()}` : '';
+    amount = `₹${val}${suffix}`;
+  } else if (m2) {
+    const val = m2[1].trim();
+    const suffix = m2[2] ? ` ${m2[2].trim()}` : '';
+    amount = `₹${val}${suffix}`;
+  } else if (m3 && m3[1] && m3[1].length >= 3) {
+    amount = `₹${m3[1].trim()}`;
+  }
+
+  // 2. Mule UPI Extraction (e.g. *.cbi@sbi, *.police@hdfc, mule.fastpay@icici, standard UPI handles)
+  let muleUpi = null;
+  const upiRegex = /\b([a-zA-Z0-9.\-_]{2,50}@(?!gmail|google|yahoo|outlook|hotmail|proton|icloud|gov\.in|nic\.in)[a-zA-Z0-9_\-]+(?:\.[a-zA-Z0-9_\-]+)?)\b/i;
+  const upiMatch = text.match(upiRegex);
+  if (upiMatch) {
+    muleUpi = upiMatch[1].trim();
+  }
+
+  // 3. UTR / Bank Reference Number Extraction (12-digit reference or UTR prefix)
+  let utrNumber = null;
+  const utrPrefixRegex = /\bUTR[-\s:]*([A-Za-z0-9-]{10,24})\b/i;
+  const utrExplicitMatch = text.match(utrPrefixRegex);
+  if (utrExplicitMatch) {
+    const raw = utrExplicitMatch[0].trim();
+    utrNumber = raw.toUpperCase().startsWith('UTR') ? raw : `UTR-${utrExplicitMatch[1].trim()}`;
+  } else {
+    const refRegex = /(?:utr|reference|rrn|txn|transaction\s*(?:id|no|num|ref)?)[-:\s#]*(\d{12})\b/i;
+    const refMatch = text.match(refRegex);
+    if (refMatch) {
+      utrNumber = `UTR-${refMatch[1].trim()}`;
+    }
+  }
+
+  // 4. Remote Access APK / Session Extraction (AnyDesk, TeamViewer, RustDesk, QuickSupport)
+  let remoteApk = null;
+  const remoteTools = ['AnyDesk', 'TeamViewer', 'RustDesk', 'QuickSupport', 'Zoho Assist', 'ApowerMirror', 'AirDroid'];
+  for (const tool of remoteTools) {
+    const toolRegex = new RegExp(`\\b${tool}\\b`, 'i');
+    if (toolRegex.test(text)) {
+      const sessionRegex = new RegExp(`${tool}[^.\\n]*?(?:session|code|id)?\\s*[:#-]?\\s*(\\d{3}[\\s-]\\d{3}[\\s-]\\d{3}|\\d{9,10})`, 'i');
+      const sessionMatch = text.match(sessionRegex);
+      if (sessionMatch) {
+        remoteApk = `${tool} (Session: ${sessionMatch[1].trim()})`;
+      } else if (/quicksupport/i.test(text) && !/quicksupport/i.test(tool)) {
+        remoteApk = `${tool} QuickSupport APK`;
+      } else if (/apk/i.test(text)) {
+        remoteApk = `${tool} APK`;
+      } else {
+        remoteApk = tool;
+      }
+      break;
+    }
+  }
+
+  if (!remoteApk) {
+    const apkMatch = text.match(/([a-zA-Z0-9_\- ]{3,25}\s*APK)/i);
+    if (apkMatch && !apkMatch[1].toLowerCase().includes('download')) {
+      remoteApk = apkMatch[1].trim();
+    }
+  }
+
+  // 5. Impersonated Law Enforcement / Government Agency
+  let impersonatedAgency = null;
+  const agencies = [
+    { pattern: /\b(CBI|Central Bureau of Investigation)\b/i, name: 'CBI' },
+    { pattern: /\b(Mumbai Police)\b/i, name: 'Mumbai Police' },
+    { pattern: /\b(Cyber\s*Crime\s*Branch|Cyber\s*Cell|Cyber\s*Police)\b/i, name: 'Cyber Crime Branch' },
+    { pattern: /\b(TRAI|Telecom Regulatory Authority)\b/i, name: 'TRAI' },
+    { pattern: /\b(Narcotics Control Bureau|NCB)\b/i, name: 'Narcotics Control Bureau' },
+    { pattern: /\b(Customs(?:\s*Department)?)\b/i, name: 'Customs' },
+    { pattern: /\b(FedEx(?:\s*Security|\s*Courier)?)\b/i, name: 'FedEx' },
+    { pattern: /\b(Enforcement Directorate|ED)\b/i, name: 'Enforcement Directorate' },
+    { pattern: /\b(Delhi Police)\b/i, name: 'Delhi Police' },
+    { pattern: /\b(Police)\b/i, name: 'Police' },
+  ];
+
+  for (const agency of agencies) {
+    if (agency.pattern.test(text)) {
+      impersonatedAgency = agency.name;
+      break;
+    }
+  }
+
+  // 6. Caller / Target Phone Number
+  let callerPhone = null;
+  if (text.includes('[REDACTED-PHONE]')) {
+    callerPhone = '[REDACTED-PHONE]';
+  } else {
+    const phoneMatch = text.match(/(?:(?:\+91|91)[-\s]?)?[6-9]\d{4}[-\s]?\d{5}\b|(?:(?:\+91|91)[-\s]?)?[6-9]\d{9}\b/);
+    if (phoneMatch) {
+      callerPhone = phoneMatch[0].trim();
+    }
+  }
+
+  return {
+    amount,
+    mule_upi: muleUpi,
+    utr_number: utrNumber,
+    remote_apk: remoteApk,
+    impersonated_agency: impersonatedAgency,
+    caller_phone: callerPhone,
+  };
+}
+
+/**
+ * Classify Scam Attack Stage (Stages 1 - 4):
+ * Stage 1: AUTHORITY IMPERSONATION - Claiming to be police/CBI/TRAI/customs.
+ * Stage 2: DIGITAL COERCION - Threatening arrest, illegal parcels, demanding video call isolation.
+ * Stage 3: DEVICE INFILTRATION - Screen share, downloading APK / AnyDesk / TeamViewer.
+ * Stage 4: ASSET LIQUIDATION - Urgent fund transfer, OTP request, "security verification deposit".
+ */
+export function detectScamAttackStage(text = '', threatKeywords = [], extractedEntities = {}) {
+  const lower = (text || '').toLowerCase();
+  const kwList = Array.isArray(threatKeywords) ? threatKeywords.map((k) => k.toLowerCase()) : [];
+  const entities = extractedEntities || {};
+
+  const isStage4 =
+    Boolean(entities.utr_number) ||
+    Boolean(entities.mule_upi) ||
+    kwList.includes('otp bataya tha') ||
+    kwList.includes('otp maang rahe hain') ||
+    kwList.includes('paise kat gaye') ||
+    kwList.includes('paise deduct ho gaye') ||
+    kwList.includes('mule account') ||
+    lower.includes('cbi.officer.desk@sbi') ||
+    lower.includes('mule.fastpay@icici') ||
+    (kwList.includes('otp') && (lower.includes('demanding') || lower.includes('transfer') || lower.includes('deducted') || lower.includes('share'))) ||
+    (Boolean(entities.amount) && (lower.includes('transfer') || lower.includes('demanding otp') || lower.includes('paid')));
+
+  const isStage3 =
+    Boolean(entities.remote_apk) ||
+    kwList.includes('screen share karwaya') ||
+    kwList.includes('app download karne ko bola') ||
+    kwList.includes('anydesk') ||
+    kwList.includes('teamviewer') ||
+    kwList.includes('rustdesk') ||
+    kwList.includes('quicksupport') ||
+    kwList.includes('screen share') ||
+    kwList.includes('apk') ||
+    lower.includes('anydesk') ||
+    lower.includes('quicksupport') ||
+    lower.includes('screen share');
+
+  const isStage2 =
+    kwList.includes('digital arrest bol rahe hain') ||
+    kwList.includes('video call band mat karo') ||
+    kwList.includes('digital arrest') ||
+    kwList.includes('arrest warrant') ||
+    kwList.includes('blackmail') ||
+    kwList.includes('extortion') ||
+    kwList.includes('webcam') ||
+    kwList.includes('leak video') ||
+    kwList.includes('kill myself') ||
+    kwList.includes('suicide') ||
+    lower.includes('blackmail') ||
+    lower.includes('extortion') ||
+    lower.includes('morphed') ||
+    lower.includes('leak video') ||
+    lower.includes('digital arrest');
+
+  const isStage1 =
+    Boolean(entities.impersonated_agency) ||
+    kwList.includes('police bol rahi hai') ||
+    kwList.includes('cbi') ||
+    kwList.includes('police') ||
+    kwList.includes('customs') ||
+    kwList.includes('trai') ||
+    kwList.includes('narcotics') ||
+    kwList.includes('fedex') ||
+    lower.includes('cbi') ||
+    lower.includes('police') ||
+    lower.includes('customs') ||
+    lower.includes('trai');
+
+  if (isStage4 && !entities.remote_apk) {
+    return {
+      stage_number: 4,
+      stage_name: 'ASSET LIQUIDATION',
+      stage_desc: 'Urgent fund transfer, OTP request, mule routing, or security verification deposit in progress.',
+      next_action: 'Initiate immediate 1930 NCRP golden-hour freeze on beneficiary accounts and transaction UTR.',
+    };
+  }
+
+  if (isStage3) {
+    return {
+      stage_number: 3,
+      stage_name: 'DEVICE INFILTRATION',
+      stage_desc: 'Screen share, downloading malicious APK, or remote desktop tool (AnyDesk/TeamViewer) active.',
+      next_action: 'Order caller to enable Airplane Mode, disconnect Wi-Fi, and uninstall remote access tools.',
+    };
+  }
+
+  if (isStage4) {
+    return {
+      stage_number: 4,
+      stage_name: 'ASSET LIQUIDATION',
+      stage_desc: 'Urgent fund transfer, OTP request, mule routing, or security verification deposit in progress.',
+      next_action: 'Initiate immediate 1930 NCRP golden-hour freeze on beneficiary accounts and transaction UTR.',
+    };
+  }
+
+  if (isStage2) {
+    return {
+      stage_number: 2,
+      stage_name: 'DIGITAL COERCION',
+      stage_desc: 'Threatening arrest, illegal parcels, video call isolation, or blackmail intimidation.',
+      next_action: 'Instruct caller to immediately disconnect scammer call and do not transfer compromise funds.',
+    };
+  }
+
+  if (isStage1) {
+    return {
+      stage_number: 1,
+      stage_name: 'AUTHORITY IMPERSONATION',
+      stage_desc: 'Claiming to be police, CBI, TRAI, customs, or official courier.',
+      next_action: 'Advise caller law enforcement never conducts inquiries or arrests over phone/video calls.',
+    };
+  }
+
+  return {
+    stage_number: 1,
+    stage_name: 'AUTHORITY IMPERSONATION',
+    stage_desc: 'Initial fraudulent contact or authority impersonation suspicion.',
+    next_action: 'Verify caller credentials and log incoming telephone reference.',
+  };
+}
+
 export function clientFuseBiomarkers(biomarkers, detectedKeywords = []) {
   const pitch = biomarkers.pitch_hz;
   const jitter = biomarkers.jitter_tremor_pct;
@@ -315,6 +586,8 @@ export async function analyzeAudioClientSide(audioData, sampleRate = 16000, tran
 
   const { text: redactedText, count: piiCount } = clientRedactPii(rawText);
   const keywords = clientDetectThreats(rawText);
+  const extractedEntities = extractCyberEntities(rawText);
+  const scamStage = detectScamAttackStage(rawText, keywords, extractedEntities);
   const fusion = clientFuseBiomarkers(biomarkers, keywords);
 
   let category = 'Cyber Incident / General Fraud Inquiry';
@@ -338,11 +611,11 @@ export async function analyzeAudioClientSide(audioData, sampleRate = 16000, tran
       '2. Request complainant to speak clearly.',
       '3. If line remains silent, initiate callback protocol.',
     ];
-  } else if (keywords.includes('digital arrest') || keywords.includes('cbi')) {
+  } else if (keywords.includes('digital arrest') || keywords.includes('cbi') || keywords.includes('digital arrest bol rahe hain') || keywords.includes('police bol rahi hai')) {
     category = 'Digital Arrest Extortion / Impersonation of Law Enforcement';
-  } else if (keywords.includes('anydesk') || keywords.includes('quicksupport')) {
+  } else if (keywords.includes('anydesk') || keywords.includes('quicksupport') || keywords.includes('screen share karwaya') || keywords.includes('app download karne ko bola')) {
     category = 'Remote Access Fraud / Device Takeover (AnyDesk/TeamViewer)';
-  } else if (keywords.includes('otp') || keywords.includes('transfer') || keywords.includes('upi')) {
+  } else if (keywords.includes('otp') || keywords.includes('transfer') || keywords.includes('upi') || keywords.includes('paise kat gaye') || keywords.includes('paise deduct ho gaye') || keywords.includes('otp bataya tha') || keywords.includes('otp maang rahe hain')) {
     category = 'Active UPI Fraud / Unauthorized Financial Drain';
   }
 
@@ -374,10 +647,14 @@ export async function analyzeAudioClientSide(audioData, sampleRate = 16000, tran
       pii_masked_count: piiCount,
       detected_keywords: keywords,
     },
+    extracted_entities: extractedEntities,
+    scam_stage: scamStage,
     triage_insights: {
+      extracted_entities: extractedEntities,
+      scam_stage: scamStage,
       crime_category: category,
       recommended_actions: actions,
-      explainability_summary: `Urgency ${fusion.urgencyScore}/100 computed on-device via Web Audio DSP with ${jitter}% vocal tremor and ${pitch} Hz pitch.`,
+      explainability_summary: `Urgency ${fusion.urgencyScore}/100 computed on-device via Web Audio DSP with ${jitter}% vocal tremor and ${pitch} Hz pitch. Attack Stage: ${scamStage.stage_name}.`,
       indicative_disclaimer: INDICATIVE_DISCLAIMER,
     },
     timeline_segments: segments,

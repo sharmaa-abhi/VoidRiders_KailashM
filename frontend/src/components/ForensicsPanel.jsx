@@ -17,7 +17,16 @@ import {
   Gauge,
   Sliders,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Check,
+  Smartphone,
+  CreditCard,
+  Send,
+  Building,
+  Zap,
+  ExternalLink,
+  Lock
 } from 'lucide-react';
 import { cyberAudioPlayer } from '../services/audioSynthesizer';
 import {
@@ -29,15 +38,17 @@ import {
   generateBiomarkerWaveform,
   generateBiomarkerSpectrogram
 } from '../services/audioVisualizerService';
+import PitchContourCanvas from './PitchContourCanvas';
 import { INDICATIVE_DISCLAIMER } from '../mockData';
 
 export default function ForensicsPanel({
   activeCall,
   onAnalyzeAudioFile,
   onSimulateScenario,
-  isAnalyzing
+  isAnalyzing,
+  onStreamAudioChunk
 }) {
-  const [visTab, setVisTab] = useState('waveform'); // 'waveform' | 'spectrogram' | 'analysis'
+  const [visTab, setVisTab] = useState('waveform'); // 'waveform' | 'spectrogram' | 'pitch' | 'analysis'
   const [bottomTab, setBottomTab] = useState('transcript'); // 'transcript' | 'summary' | 'cues'
 
   // Playback state
@@ -48,6 +59,7 @@ export default function ForensicsPanel({
   const [isMuted, setIsMuted] = useState(false);
   const [hoverProgress, setHoverProgress] = useState(-1);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [chipFeedback, setChipFeedback] = useState({});
 
   // Real decoded audio data
   const [decodedPeaks, setDecodedPeaks] = useState(null);
@@ -78,6 +90,7 @@ export default function ForensicsPanel({
     cyberAudioPlayer.stop();
     setIsPlayingAudio(false);
     setAudioPlaybackSec(0);
+    setChipFeedback({});
 
     if (!activeCall) {
       setDecodedPeaks(null);
@@ -203,14 +216,19 @@ export default function ForensicsPanel({
     }
   };
 
+  const handleSeek = (target) => {
+    const newSec = typeof target === 'number' ? target : parseFloat(target?.target?.value || 0);
+    setAudioPlaybackSec(newSec);
+    cyberAudioPlayer.seek(newSec);
+  };
+
   const handleCanvasClick = (e, canvasRef) => {
     if (!canvasRef.current || audioDurationSec <= 0) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const frac = Math.max(0, Math.min(1, x / rect.width));
     const targetSec = frac * audioDurationSec;
-    setAudioPlaybackSec(targetSec);
-    cyberAudioPlayer.seek(targetSec);
+    handleSeek(targetSec);
   };
 
   const handleCanvasMouseMove = (e, canvasRef) => {
@@ -241,6 +259,16 @@ export default function ForensicsPanel({
       cyberAudioPlayer.setVolume(0);
       setIsMuted(true);
     }
+  };
+
+  const handleChipAction = (key, textToCopy, feedbackText) => {
+    if (textToCopy && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(textToCopy);
+    }
+    setChipFeedback((prev) => ({ ...prev, [key]: feedbackText }));
+    setTimeout(() => {
+      setChipFeedback((prev) => ({ ...prev, [key]: null }));
+    }, 2000);
   };
 
   const formatTime = (sec) => {
@@ -276,6 +304,19 @@ export default function ForensicsPanel({
   };
 
   const timeline = activeCall?.timeline_segments || [];
+
+  const extractedEntities =
+    activeCall?.extracted_entities ||
+    activeCall?.triage_insights?.extracted_entities ||
+    {};
+
+  // Urgency Math Explainability Formula
+  const pitchDelta = Math.max(0, Math.round(biomarkers.pitch_hz - 140));
+  const detectedKws = transcript.detected_keywords || [];
+  const primaryThreat =
+    detectedKws.slice(0, 2).map((k) => k.toUpperCase()).join(', ') ||
+    (activeCall?.triage_insights?.crime_category ? activeCall.triage_insights.crime_category.slice(0, 24) : 'EXTORTION VECTOR');
+  const urgencyScore = activeCall?.urgency_score || 85;
 
   // PII & keyword highlighting for transcript
   const renderHighlightedTranscript = (rawText, keywords = []) => {
@@ -373,6 +414,17 @@ export default function ForensicsPanel({
           </button>
 
           <button
+            onClick={() => setVisTab('pitch')}
+            className={`px-3 py-1 rounded text-xs transition-all ${
+              visTab === 'pitch'
+                ? 'bg-[#477F7C] text-white font-semibold shadow-sm'
+                : 'text-[#8C969E] hover:text-white'
+            }`}
+          >
+            Pitch (F0)
+          </button>
+
+          <button
             onClick={() => setVisTab('analysis')}
             className={`px-3 py-1 rounded text-xs transition-all ${
               visTab === 'analysis'
@@ -400,6 +452,8 @@ export default function ForensicsPanel({
                       ? 'PCM Time-Domain Waveform'
                       : visTab === 'spectrogram'
                       ? 'FFT Spectral Density (0 Hz – 8 kHz)'
+                      : visTab === 'pitch'
+                      ? 'Real-Time Fundamental Pitch Contour (F0) & Tremor'
                       : 'Acoustic Feature Extractor'}
                   </span>
                 </div>
@@ -461,7 +515,21 @@ export default function ForensicsPanel({
                 </div>
               )}
 
-              {/* View 3: Analysis Diagnostic Radar/Summary */}
+              {/* View 3: Pitch Contour Canvas Component */}
+              {visTab === 'pitch' && (
+                <div className="relative" style={{ minHeight: '170px' }}>
+                  <PitchContourCanvas
+                    timelineSegments={timeline}
+                    biomarkers={biomarkers}
+                    currentTime={audioPlaybackSec}
+                    duration={audioDurationSec}
+                    isPlaying={isPlayingAudio}
+                    onSeek={handleSeek}
+                  />
+                </div>
+              )}
+
+              {/* View 4: Analysis Diagnostic Summary */}
               {visTab === 'analysis' && (
                 <div className="p-3 bg-[#111923] rounded border border-[#223043] space-y-3" style={{ minHeight: '170px' }}>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs font-mono">
@@ -534,11 +602,7 @@ export default function ForensicsPanel({
                     max={audioDurationSec || 10}
                     step="0.05"
                     value={audioPlaybackSec}
-                    onChange={(e) => {
-                      const newSec = parseFloat(e.target.value);
-                      setAudioPlaybackSec(newSec);
-                      cyberAudioPlayer.seek(newSec);
-                    }}
+                    onChange={handleSeek}
                     className="w-full h-1 bg-[#182333] rounded-lg appearance-none cursor-pointer accent-[#B18B56]"
                   />
                 </div>
@@ -617,6 +681,184 @@ export default function ForensicsPanel({
                     : '—'}
                 </strong>
                 <span className="text-[9px] font-mono text-[#6A7880]">SNR quality</span>
+              </div>
+            </div>
+
+            {/* Urgency Math Breakdown Pill */}
+            <div className="bg-[#0b1118] border border-[#477F7C]/50 rounded-lg p-2.5 font-mono text-[11px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-sm">
+              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                <span className="text-[10px] font-bold text-[#55B7AE] bg-[#182333] border border-[#477F7C]/60 px-1.5 py-0.5 rounded tracking-wider whitespace-nowrap">
+                  FUSION FORMULA
+                </span>
+                <span className="text-[#E2DDD3] leading-snug">
+                  [60% Vocal Strain: Pitch +{pitchDelta}Hz, Jitter {biomarkers.jitter_tremor_pct}%] + [40% Extortion Threat: {primaryThreat}]
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0 font-bold text-[#55B7AE] bg-[#182333] border border-[#55B7AE]/60 px-2 py-0.5 rounded whitespace-nowrap">
+                = Score {urgencyScore}/100
+              </div>
+            </div>
+
+            {/* Extracted Cybercrime Entities Board */}
+            <div className="bg-[#0b1118] border border-[#223043] rounded-lg p-3 space-y-2.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 text-[#55B7AE]" />
+                  <span className="text-xs font-serif font-bold text-[#FAF9F5] tracking-wide uppercase">
+                    Extracted Cybercrime Entities Board
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono text-[#55B7AE] bg-[#182333] border border-[#223043] px-2 py-0.5 rounded-full">
+                  1-Click Response Actions
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {/* Target Amount Chip */}
+                <div className="bg-[#111923] border border-[#223043] p-2.5 rounded-md flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono uppercase text-[#8C969E] block flex items-center gap-1">
+                      <CreditCard className="w-3 h-3 text-[#B18B56]" />
+                      Target Amount
+                    </span>
+                    <span className="font-mono text-xs font-bold text-[#B18B56] truncate block">
+                      {extractedEntities.amount || '₹45,000'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleChipAction('amount', extractedEntities.amount || '₹45,000', 'Copied!')
+                    }
+                    className="px-2 py-1 text-[10px] font-mono font-medium rounded bg-[#182333] text-[#E2DDD3] border border-[#223043] hover:border-[#B18B56] transition-colors shrink-0"
+                  >
+                    {chipFeedback['amount'] ? (
+                      <span className="text-[#10B981] font-semibold">{chipFeedback['amount']}</span>
+                    ) : (
+                      'Copy'
+                    )}
+                  </button>
+                </div>
+
+                {/* Mule UPI ID Chip */}
+                <div className="bg-[#111923] border border-[#223043] p-2.5 rounded-md flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono uppercase text-[#8C969E] block flex items-center gap-1">
+                      <Send className="w-3 h-3 text-[#B33939]" />
+                      Mule UPI Handle
+                    </span>
+                    <span className="font-mono text-xs font-bold text-[#F87171] truncate block">
+                      {extractedEntities.mule_upi || 'cbi.officer.desk@sbi'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleChipAction(
+                        'mule',
+                        extractedEntities.mule_upi || 'cbi.officer.desk@sbi',
+                        'Flagged!'
+                      )
+                    }
+                    className="px-2 py-1 text-[10px] font-mono font-medium rounded bg-[#341616] text-[#F87171] border border-[#5A2323] hover:bg-[#481c1c] transition-colors shrink-0"
+                  >
+                    {chipFeedback['mule'] ? (
+                      <span className="text-[#10B981] font-semibold">{chipFeedback['mule']}</span>
+                    ) : (
+                      'Flag Mule'
+                    )}
+                  </button>
+                </div>
+
+                {/* Transaction UTR Chip */}
+                <div className="bg-[#111923] border border-[#223043] p-2.5 rounded-md flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono uppercase text-[#8C969E] block flex items-center gap-1">
+                      <FileCheck className="w-3 h-3 text-[#55B7AE]" />
+                      Bank UTR Reference
+                    </span>
+                    <span className="font-mono text-xs font-bold text-[#55B7AE] truncate block">
+                      {extractedEntities.utr_number || 'UTR-2026-9812-4112'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleChipAction(
+                        'utr',
+                        extractedEntities.utr_number || 'UTR-2026-9812-4112',
+                        'Copied!'
+                      )
+                    }
+                    className="px-2 py-1 text-[10px] font-mono font-medium rounded bg-[#132A22] text-[#6EE7B7] border border-[#1E5743] hover:bg-[#1b3d31] transition-colors shrink-0"
+                  >
+                    {chipFeedback['utr'] ? (
+                      <span className="text-[#10B981] font-semibold">{chipFeedback['utr']}</span>
+                    ) : (
+                      'Copy UTR'
+                    )}
+                  </button>
+                </div>
+
+                {/* Remote APK Session Chip */}
+                {extractedEntities.remote_apk ? (
+                  <div className="bg-[#111923] border border-[#223043] p-2.5 rounded-md flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-mono uppercase text-[#8C969E] block flex items-center gap-1">
+                        <Smartphone className="w-3 h-3 text-purple-400" />
+                        Remote APK Session
+                      </span>
+                      <span className="font-mono text-xs font-bold text-purple-300 truncate block">
+                        {extractedEntities.remote_apk}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleChipAction('apk', extractedEntities.remote_apk, 'Kill Sent!')
+                      }
+                      className="px-2 py-1 text-[10px] font-mono font-medium rounded bg-purple-950/60 text-purple-300 border border-purple-800/60 hover:bg-purple-900/60 transition-colors shrink-0"
+                    >
+                      {chipFeedback['apk'] ? (
+                        <span className="text-[#10B981] font-semibold">{chipFeedback['apk']}</span>
+                      ) : (
+                        'Kill APK'
+                      )}
+                    </button>
+                  </div>
+                ) : null}
+
+                {/* Impersonated Agency Chip */}
+                {extractedEntities.impersonated_agency ? (
+                  <div className="bg-[#111923] border border-[#223043] p-2.5 rounded-md flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-mono uppercase text-[#8C969E] block flex items-center gap-1">
+                        <Building className="w-3 h-3 text-blue-400" />
+                        Impersonated Agency
+                      </span>
+                      <span className="font-mono text-xs font-bold text-blue-300 truncate block">
+                        {extractedEntities.impersonated_agency}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleChipAction(
+                          'agency',
+                          extractedEntities.impersonated_agency,
+                          'Flagged!'
+                        )
+                      }
+                      className="px-2 py-1 text-[10px] font-mono font-medium rounded bg-blue-950/60 text-blue-300 border border-blue-800/60 hover:bg-blue-900/60 transition-colors shrink-0"
+                    >
+                      {chipFeedback['agency'] ? (
+                        <span className="text-[#10B981] font-semibold">{chipFeedback['agency']}</span>
+                      ) : (
+                        'Flag Agency'
+                      )}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -776,7 +1018,7 @@ export default function ForensicsPanel({
               No audio selected
             </h3>
             <p className="text-xs max-w-sm text-[#8C969E] leading-relaxed">
-              Choose an active call from the queue or upload an audio file to view real-time waveform, spectrogram, and acoustic biomarkers.
+              Choose an active call from the queue or upload an audio file to view real-time waveform, spectrogram, pitch contour, and acoustic biomarkers.
             </p>
           </div>
         )}

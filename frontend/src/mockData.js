@@ -28,20 +28,60 @@ export const FALLBACK_SCENARIOS = [
     },
     transcript: {
       raw_redacted:
-        "Sir please help! Someone on video call said they are from CBI Mumbai and I am under digital arrest for a FedEx parcel containing narcotics! They made me transfer ₹1,50,000 from account ending [REDACTED-ACCT] and now demanding OTP [REDACTED-OTP] from my phone [REDACTED-PHONE] right now!",
-      pii_masked_count: 3,
-      detected_keywords: ["digital arrest", "cbi", "video call", "transfer", "otp"],
+        "Sir please help! Someone on video call said they are from CBI Mumbai and digital arrest bol rahe hain for a FedEx parcel containing narcotics! They made me transfer ₹45,000 to mule UPI cbi.officer.desk@sbi with transaction UTR-2026-9812-4112 and now video call band mat karo bol rahe hain and OTP maang rahe hain right now from my phone [REDACTED-PHONE]!",
+      pii_masked_count: 2,
+      detected_keywords: [
+        "digital arrest",
+        "cbi",
+        "video call",
+        "transfer",
+        "otp",
+        "narcotics",
+        "fedex",
+        "upi",
+        "digital arrest bol rahe hain",
+        "video call band mat karo",
+        "otp maang rahe hain"
+      ],
+    },
+    extracted_entities: {
+      amount: "₹45,000",
+      mule_upi: "cbi.officer.desk@sbi",
+      utr_number: "UTR-2026-9812-4112",
+      remote_apk: null,
+      impersonated_agency: "CBI",
+      caller_phone: "[REDACTED-PHONE]",
+    },
+    scam_stage: {
+      stage_number: 4,
+      stage_name: "ASSET LIQUIDATION",
+      stage_desc: "Urgent fund transfer, OTP request, mule routing, or security verification deposit in progress.",
+      next_action: "Initiate immediate 1930 NCRP golden-hour freeze on beneficiary accounts and transaction UTR.",
     },
     triage_insights: {
       crime_category: "Digital Arrest Extortion / Impersonation of Law Enforcement",
       recommended_actions: [
         "1. Instruct caller immediately to DISCONNECT the scammer's video call and NOT share any OTP.",
         "2. Reassure caller that Indian police, CBI, ED, and customs NEVER conduct arrests over video calls.",
-        "3. Collect victim transaction UTR and initiate immediate 1930 NCRP financial freeze request.",
+        "3. Collect victim transaction UTR-2026-9812-4112 and initiate immediate 1930 NCRP financial freeze request.",
         "4. Confirm caller is in a safe location and log complaint on cybercrime.gov.in."
       ],
       explainability_summary:
-        "Urgency 94/100 triggered by severe vocal pitch tremor (4.2% jitter), rapid speech rate (6.4 syl/sec), and acute Digital Arrest / OTP extortion keywords.",
+        "Urgency 94/100 triggered by severe vocal pitch tremor (4.2% jitter), rapid speech rate (6.4 syl/sec), and acute Digital Arrest / OTP extortion keywords. Attack Stage: ASSET LIQUIDATION.",
+      extracted_entities: {
+        amount: "₹45,000",
+        mule_upi: "cbi.officer.desk@sbi",
+        utr_number: "UTR-2026-9812-4112",
+        remote_apk: null,
+        impersonated_agency: "CBI",
+        caller_phone: "[REDACTED-PHONE]",
+      },
+      scam_stage: {
+        stage_number: 4,
+        stage_name: "ASSET LIQUIDATION",
+        stage_desc: "Urgent fund transfer, OTP request, mule routing, or security verification deposit in progress.",
+        next_action: "Initiate immediate 1930 NCRP golden-hour freeze on beneficiary accounts and transaction UTR.",
+      },
       indicative_disclaimer: INDICATIVE_DISCLAIMER,
     },
     timeline_segments: [
@@ -77,9 +117,31 @@ export const FALLBACK_SCENARIOS = [
     },
     transcript: {
       raw_redacted:
-        "I received an unknown video call on WhatsApp. They recorded my webcam and created a morphed naked video. Now they are blackmailing me and threatening to leak video to my family if I don't pay ₹80,000 extortion money. I am terrified, I don't know what to do, I might kill myself...",
+        "I received an unknown video call on WhatsApp. They recorded my webcam and created a morphed naked video. Now they are blackmailing me and threatening to leak video to my family if I don't pay ₹25,000 extortion money. Video call band mat karo bol rahe hain. I am terrified, I don't know what to do, I might kill myself...",
       pii_masked_count: 0,
-      detected_keywords: ["video call", "webcam", "blackmail", "leak video", "extortion", "kill myself"],
+      detected_keywords: [
+        "video call",
+        "webcam",
+        "blackmail",
+        "leak video",
+        "extortion",
+        "kill myself",
+        "video call band mat karo"
+      ],
+    },
+    extracted_entities: {
+      amount: "₹25,000",
+      mule_upi: null,
+      utr_number: null,
+      remote_apk: null,
+      impersonated_agency: null,
+      caller_phone: null,
+    },
+    scam_stage: {
+      stage_number: 2,
+      stage_name: "DIGITAL COERCION",
+      stage_desc: "Threatening arrest, illegal parcels, video call isolation, or blackmail intimidation.",
+      next_action: "Advise caller to disconnect video call, do not pay extortion, and ensure physical safety.",
     },
     triage_insights: {
       crime_category: "Sextortion / Cyber Blackmail & Intimidation",
@@ -90,7 +152,21 @@ export const FALLBACK_SCENARIOS = [
         "4. Assist caller in submitting removal request via TakeItDown and registering NCRP complaint."
       ],
       explainability_summary:
-        "Urgency 91/100 driven by extreme psychological distress acoustic markers and critical self-harm / cyber blackmail threats.",
+        "Urgency 91/100 driven by extreme psychological distress acoustic markers and critical self-harm / cyber blackmail threats. Attack Stage: DIGITAL COERCION.",
+      extracted_entities: {
+        amount: "₹25,000",
+        mule_upi: null,
+        utr_number: null,
+        remote_apk: null,
+        impersonated_agency: null,
+        caller_phone: null,
+      },
+      scam_stage: {
+        stage_number: 2,
+        stage_name: "DIGITAL COERCION",
+        stage_desc: "Threatening arrest, illegal parcels, video call isolation, or blackmail intimidation.",
+        next_action: "Advise caller to disconnect video call, do not pay extortion, and ensure physical safety.",
+      },
       indicative_disclaimer: INDICATIVE_DISCLAIMER,
     },
     timeline_segments: [
@@ -125,9 +201,32 @@ export const FALLBACK_SCENARIOS = [
     },
     transcript: {
       raw_redacted:
-        "I got an SMS saying electricity bill unpaid. Caller asked me to install AnyDesk QuickSupport APK. As soon as I installed it, ₹45,000 money deducted from my SBI account ending [REDACTED-ACCT] via UPI! Can you freeze the transaction right now?",
+        "I got an SMS saying electricity bill unpaid. Caller asked me app download karne ko bola and install AnyDesk (Session: 948 219 042) QuickSupport APK. Screen share karwaya aur bola paise deduct ho gaye ₹1,20,000 from my SBI account ending [REDACTED-ACCT] via UPI! Can you freeze the transaction right now?",
       pii_masked_count: 1,
-      detected_keywords: ["anydesk", "quicksupport", "money deducted", "upi", "apk"],
+      detected_keywords: [
+        "anydesk",
+        "quicksupport",
+        "screen share",
+        "apk",
+        "upi",
+        "paise deduct ho gaye",
+        "screen share karwaya",
+        "app download karne ko bola"
+      ],
+    },
+    extracted_entities: {
+      amount: "₹1,20,000",
+      mule_upi: null,
+      utr_number: null,
+      remote_apk: "AnyDesk (Session: 948 219 042)",
+      impersonated_agency: null,
+      caller_phone: "[REDACTED-PHONE]",
+    },
+    scam_stage: {
+      stage_number: 3,
+      stage_name: "DEVICE INFILTRATION",
+      stage_desc: "Screen share, downloading malicious APK, or remote desktop tool (AnyDesk/TeamViewer) active.",
+      next_action: "Order caller to enable Airplane Mode, disconnect Wi-Fi, and uninstall remote access tools.",
     },
     triage_insights: {
       crime_category: "Remote Access Fraud / Device Takeover (AnyDesk/TeamViewer)",
@@ -138,7 +237,21 @@ export const FALLBACK_SCENARIOS = [
         "4. Uninstall AnyDesk/QuickSupport and wipe malicious APK downloads."
       ],
       explainability_summary:
-        "Urgency 83/100 triggered by active financial drain keywords (AnyDesk, UPI, money deducted) and elevated vocal cadence.",
+        "Urgency 83/100 triggered by remote APK takeover (AnyDesk), vocal cadence elevation, and acute device infiltration. Attack Stage: DEVICE INFILTRATION.",
+      extracted_entities: {
+        amount: "₹1,20,000",
+        mule_upi: null,
+        utr_number: null,
+        remote_apk: "AnyDesk (Session: 948 219 042)",
+        impersonated_agency: null,
+        caller_phone: "[REDACTED-PHONE]",
+      },
+      scam_stage: {
+        stage_number: 3,
+        stage_name: "DEVICE INFILTRATION",
+        stage_desc: "Screen share, downloading malicious APK, or remote desktop tool (AnyDesk/TeamViewer) active.",
+        next_action: "Order caller to enable Airplane Mode, disconnect Wi-Fi, and uninstall remote access tools.",
+      },
       indicative_disclaimer: INDICATIVE_DISCLAIMER,
     },
     timeline_segments: [
@@ -172,9 +285,23 @@ export const FALLBACK_SCENARIOS = [
     },
     transcript: {
       raw_redacted:
-        "I want to report anonymously. My roommate opened 4 bank accounts at local private branches and is renting them out as mule account handlers for telegram job task scams. The primary phone number he uses for coordinator calls is [REDACTED-PHONE].",
+        "I want to report anonymously. My roommate opened 4 bank accounts at local private branches and is renting them out as mule account handlers for telegram job task scams. All stolen funds are routed via mule UPI mule.fastpay@icici with amounts exceeding ₹5,00,000. The primary phone number he uses for coordinator calls is [REDACTED-PHONE].",
       pii_masked_count: 1,
-      detected_keywords: ["mule account", "transfer"],
+      detected_keywords: ["mule account", "transfer", "upi"],
+    },
+    extracted_entities: {
+      amount: "₹5,00,000",
+      mule_upi: "mule.fastpay@icici",
+      utr_number: null,
+      remote_apk: null,
+      impersonated_agency: null,
+      caller_phone: "[REDACTED-PHONE]",
+    },
+    scam_stage: {
+      stage_number: 4,
+      stage_name: "ASSET LIQUIDATION",
+      stage_desc: "Urgent fund transfer, OTP request, mule routing, or security verification deposit in progress.",
+      next_action: "Initiate immediate 1930 NCRP golden-hour freeze on beneficiary accounts and transaction UTR.",
     },
     triage_insights: {
       crime_category: "Cybercrime Syndicate / Money Mule Account Ring",
@@ -184,7 +311,21 @@ export const FALLBACK_SCENARIOS = [
         "3. Flag bank branch IFSC and account cluster to cyber cell financial intelligence unit."
       ],
       explainability_summary:
-        "Urgency 54/100 indicates medium priority intel tip with moderate vocal hesitation and no ongoing active financial drain.",
+        "Urgency 54/100 indicates medium priority intel tip with moderate vocal hesitation and no ongoing active financial drain. Attack Stage: ASSET LIQUIDATION.",
+      extracted_entities: {
+        amount: "₹5,00,000",
+        mule_upi: "mule.fastpay@icici",
+        utr_number: null,
+        remote_apk: null,
+        impersonated_agency: null,
+        caller_phone: "[REDACTED-PHONE]",
+      },
+      scam_stage: {
+        stage_number: 4,
+        stage_name: "ASSET LIQUIDATION",
+        stage_desc: "Urgent fund transfer, OTP request, mule routing, or security verification deposit in progress.",
+        next_action: "Initiate immediate 1930 NCRP golden-hour freeze on beneficiary accounts and transaction UTR.",
+      },
       indicative_disclaimer: INDICATIVE_DISCLAIMER,
     },
     timeline_segments: [

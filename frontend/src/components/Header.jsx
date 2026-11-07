@@ -1,30 +1,89 @@
 import React, { useState, useEffect } from 'react';
 import {
+  AudioWaveform,
   ShieldAlert,
   Settings,
+  Cpu,
   Radio,
   Sun,
   Moon,
   ToggleLeft,
   ToggleRight,
-  Home,
-  UserCheck,
   Clock,
+  Zap,
   Activity,
-  AudioWaveform,
-  Cpu
+  Globe,
+  Home,
+  UserCheck
 } from 'lucide-react';
+import { MODEL_TIERS } from '../services/hardwareEngine';
 
 export default function Header({
+  activeCall,
   isMockMode,
   setIsMockMode,
   onOpenSettings,
+  onOpenHardwareWizard,
+  onOpenLanding,
   provider,
   backendConnected,
+  currentTier = 'MID_RANGE',
+  storageInfo,
   theme,
   setTheme,
   onOpenHome
 }) {
+  const activeTier = MODEL_TIERS[currentTier] || MODEL_TIERS.MID_RANGE;
+
+  // 60-Minute Golden Hour dynamic countdown
+  const [goldenSeconds, setGoldenSeconds] = useState(48 * 60);
+
+  useEffect(() => {
+    if (activeCall?.call_id) {
+      const initialMins = activeCall.urgency_score > 85 ? 42 : 52;
+      setGoldenSeconds(initialMins * 60);
+    }
+  }, [activeCall?.call_id]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setGoldenSeconds((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatCountdown = (totalSec) => {
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+  };
+
+  const getDispersionTier = (totalSec) => {
+    const minsLeft = Math.floor(totalSec / 60);
+    if (minsLeft > 45) {
+      return {
+        label: 'Tier 1 Mule (92% Recovery)',
+        color: 'text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-600/50 bg-emerald-50 dark:bg-emerald-950/60',
+        badge: 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300',
+      };
+    }
+    if (minsLeft > 15) {
+      return {
+        label: 'Tier 2 Multi-Hop (48% Recovery)',
+        color: 'text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-600/50 bg-amber-50 dark:bg-amber-950/60',
+        badge: 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300',
+      };
+    }
+    return {
+      label: 'ATM/Crypto Drain (<12% Recovery)',
+      color: 'text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-600/50 bg-rose-50 dark:bg-rose-950/60',
+      badge: 'bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 animate-pulse',
+    };
+  };
+
+  const tierInfo = getDispersionTier(goldenSeconds);
+
+  // Live Clock String
   const [currentDateTime, setCurrentDateTime] = useState('');
 
   useEffect(() => {
@@ -39,7 +98,6 @@ export default function Header({
         second: '2-digit',
         hour12: false,
       };
-      // e.g. "06 Nov 2026, 16:18:04"
       const formatted = now.toLocaleDateString('en-GB', options);
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
       setCurrentDateTime(`${formatted} (${tz.split('/').pop() || 'LOCAL'})`);
@@ -71,7 +129,7 @@ export default function Header({
               </h1>
               <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-[#FAF9F5] dark:bg-[#182333] text-[#477F7C] dark:text-[#55B7AE] border border-[#E2DDD3] dark:border-[#223043] font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#55B7AE] animate-ping" />
-                ACTIVE DESK
+                1930 ACTIVE DESK
               </span>
             </div>
             <p className="text-xs text-[#647078] dark:text-[#9AA6AC] flex items-center gap-1.5 font-sans">
@@ -80,12 +138,43 @@ export default function Header({
               <span>Analyze</span>
               <span className="text-[#B18B56]">·</span>
               <span>Coordinate</span>
+              <span className="text-[#B18B56]">·</span>
+              <span className="text-[#477F7C] dark:text-[#55B7AE] font-mono font-medium">Golden Hour Interdiction</span>
             </p>
           </div>
         </div>
 
-        {/* Center / Right Section: Live Telemetry & System Status */}
-        <div className="flex items-center gap-3 flex-wrap justify-between md:justify-end w-full md:w-auto">
+        {/* Center Section: Golden Hour Global Countdown Badge & Tactical Status */}
+        <div className="flex items-center gap-2">
+          {activeCall ? (
+            <div
+              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full border text-xs shadow-sm transition-all ${tierInfo.color}`}
+              title="Time window before illicit fund dispersion across secondary mule hops"
+            >
+              <Clock className="w-3.5 h-3.5 animate-pulse shrink-0" />
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="text-[11px] font-medium opacity-85 uppercase tracking-wider">Golden Hour:</span>
+                <span className="font-bold text-xs">{formatCountdown(goldenSeconds)}</span>
+              </div>
+              <span
+                className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border border-current/30 ${tierInfo.badge}`}
+              >
+                {tierInfo.label}
+              </span>
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-xs text-[#55636B] dark:text-[#9AA6AC]">
+              <Clock className="w-3.5 h-3.5 text-[#B18B56]" />
+              <span className="font-mono text-[11px]">Golden Hour: 60m Standby</span>
+              <span className="text-[9px] font-mono uppercase bg-[#E2DDD3] dark:bg-[#223043] px-1.5 py-0.5 rounded text-[#55636B] dark:text-[#9AA6AC]">
+                Awaiting Incident
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Right Section: Live Telemetry, Hardware & System Status */}
+        <div className="flex items-center gap-2.5 flex-wrap justify-between md:justify-end w-full md:w-auto">
           {/* Live Clock Strip */}
           <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-[11px] font-mono text-[#55636B] dark:text-[#9AA6AC]">
             <Clock size={12} className="text-[#B18B56]" />
@@ -119,6 +208,18 @@ export default function Header({
 
           {/* Controls Cluster */}
           <div className="flex items-center gap-1.5">
+            {/* Hardware Tier Profile Button */}
+            {onOpenHardwareWizard && (
+              <button
+                onClick={onOpenHardwareWizard}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-[#55636B] dark:text-[#9AA6AC] hover:border-[#477F7C] transition-colors"
+                title="Configure system execution profile and model cache"
+              >
+                <Cpu size={12} className="text-[#477F7C] dark:text-[#55B7AE]" />
+                <span className="text-[11px] font-mono hidden sm:inline">{activeTier.name}</span>
+              </button>
+            )}
+
             {/* Demo Mode Toggle */}
             <button
               onClick={() => setIsMockMode(!isMockMode)}
@@ -163,9 +264,9 @@ export default function Header({
             </button>
 
             {/* Return to Home / Landing Page */}
-            {onOpenHome && (
+            {(onOpenHome || onOpenLanding) && (
               <button
-                onClick={onOpenHome}
+                onClick={onOpenHome || onOpenLanding}
                 className="flex items-center justify-center w-8 h-8 rounded-md bg-[#F1EFE8] dark:bg-[#182333] border border-[#E2DDD3] dark:border-[#223043] text-[#55636B] dark:text-[#9AA6AC] hover:border-[#477F7C] transition-colors"
                 title="Return to Presentation Homepage"
               >

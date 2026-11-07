@@ -10,7 +10,14 @@ import { FALLBACK_SCENARIOS, INDICATIVE_DISCLAIMER } from './mockData';
 import { detectBrowserHardware, fetchBackendHardware } from './services/hardwareEngine';
 import { analyzeAudioClientSide } from './services/clientSerEngine';
 import { runLocalSpeechTriage } from './services/localModelEngine';
-import { saveCaseToDevice, getAllSavedCases, deleteSavedCase } from './services/caseDb';
+import {
+  saveCaseToDevice,
+  getAllSavedCases,
+  deleteSavedCase,
+  generateEvidenceSha256,
+  generateSection65BCertificate,
+  formatSection65BMarkdownBanner
+} from './services/caseDb';
 import { cyberAudioPlayer } from './services/audioSynthesizer';
 import { callSiliconFlowSTT, callGroqWhisperSTT } from './services/cloudServices';
 import AnalyzingOverlay from './components/AnalyzingOverlay';
@@ -21,9 +28,12 @@ import AboutModal from './components/AboutModal';
 
 export default function App() {
   const [showLanding, setShowLanding] = useState(() => {
-    return window.location.pathname !== '/dashboard' &&
-      new URLSearchParams(window.location.search).get('dashboard') !== 'true';
+    return (
+      window.location.pathname !== '/dashboard' &&
+      new URLSearchParams(window.location.search).get('dashboard') !== 'true'
+    );
   });
+
   // Theme state: dark / light
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('vecna_theme') || 'dark';
@@ -48,7 +58,7 @@ export default function App() {
     return isMockMode ? FALLBACK_SCENARIOS[0] : null;
   });
 
-  // Modal states
+  // Modal & layout states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHardwareWizardOpen, setIsHardwareWizardOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
@@ -61,7 +71,7 @@ export default function App() {
       ? processingTimes.reduce((a, b) => a + b, 0) / processingTimes.length
       : null;
 
-  // Settings & Tier (supports localStorage and optional Vercel env variables)
+  // Settings & Tier
   const [provider, setProvider] = useState(() => {
     return (
       localStorage.getItem('vecna_provider') ||
@@ -143,7 +153,6 @@ export default function App() {
         setCurrentTier(merged.recommendedTier);
         localStorage.setItem('vecna_model_tier', merged.recommendedTier);
       }
-
     };
 
     initHardware();
@@ -153,7 +162,6 @@ export default function App() {
   const loadSavedCases = async () => {
     const list = await getAllSavedCases();
     setSavedCases(list);
-    // If not mock mode and no session calls, pick first saved case as active if available
     if (!isMockMode && sessionCalls.length === 0 && list.length > 0 && !activeCall) {
       setActiveCall(list[0]);
     }
@@ -252,7 +260,6 @@ export default function App() {
 
     let activeHint = transcriptHint ? transcriptHint.trim() : '';
 
-    // If no hint provided and user has BYOK credentials, attempt cloud transcription during loading overlay
     if (!activeHint && apiKey) {
       try {
         if (provider === 'siliconflow') {
@@ -265,7 +272,6 @@ export default function App() {
       } catch (e) {}
     }
 
-    // If backend is online, send to backend for SenseVoice / Whisper / hybrid triage
     if (backendConnected && !isMockMode) {
       try {
         const formData = new FormData();
@@ -308,7 +314,6 @@ export default function App() {
       }
     }
 
-    // Client-side on-device models pipeline if backend is offline or on static hosting
     try {
       const arrayBuffer = await file.arrayBuffer();
       const clientPayload = await runLocalSpeechTriage(arrayBuffer, 16000, activeHint);
@@ -469,12 +474,35 @@ export default function App() {
     setIsExporting(true);
 
     try {
+      const evidencePayload = {
+        call_id: activeCall.call_id,
+        timestamp_ms: activeCall.timestamp_ms,
+        caller_tag: activeCall.caller_tag,
+        urgency_score: activeCall.urgency_score,
+        urgency_level: activeCall.urgency_level,
+        dominant_emotion: activeCall.dominant_emotion,
+        acoustic_biomarkers: activeCall.acoustic_biomarkers,
+        transcript: activeCall.transcript,
+        extracted_entities: activeCall.extracted_entities,
+        scam_stage: activeCall.scam_stage,
+        triage_insights: activeCall.triage_insights,
+      };
+
+      const sha256Hash = await generateEvidenceSha256(evidencePayload);
+      const section65BCert = generateSection65BCertificate(activeCall, sha256Hash);
+      const banner = formatSection65BMarkdownBanner(section65BCert);
+
       let reportData;
       if (isMockMode || !backendConnected) {
+        const rawMd = `# Incident Case Record\n**Case ID:** ${activeCall.call_id}\n**Urgency Score:** ${activeCall.urgency_score}/100\n**State:** ${activeCall.dominant_emotion}\n\n## Transcript\n> "${activeCall.transcript?.raw_redacted}"\n\n## Incident Classification & Threat Stage\n- **Category:** ${activeCall.triage_insights?.crime_category || 'Financial Cyber Fraud'}\n- **Attack Stage:** ${activeCall.scam_stage?.stage_name || 'ASSET LIQUIDATION'}\n- **Forensic SHA-256 Digest:** \`${sha256Hash}\`\n\n## Notice\n${INDICATIVE_DISCLAIMER}`;
         reportData = {
           filename_base: `VECNA-CASE-${activeCall.call_id}`,
-          markdown_report: `# Incident Case Record\n**Case ID:** ${activeCall.call_id}\n**Urgency Score:** ${activeCall.urgency_score}/100\n**State:** ${activeCall.dominant_emotion}\n\n## Transcript\n> "${activeCall.transcript?.raw_redacted}"\n\n## Notice\n${INDICATIVE_DISCLAIMER}`,
-          json_packet: { activeCall, copilotData },
+          markdown_report: banner + rawMd,
+          json_packet: {
+            forensic_certificate_65b: section65BCert,
+            activeCall,
+            copilotData,
+          },
         };
       } else {
         const res = await fetch('/api/export-report', {
@@ -484,10 +512,20 @@ export default function App() {
             triage_payload: activeCall,
             officer_notes: copilotData?.fir_summary_note || 'Intake log recorded.',
             copilot_data: copilotData,
+            section_65b_cert: section65BCert,
+            sha256_hash: sha256Hash,
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        reportData = await res.json();
+        const serverReport = await res.json();
+        reportData = {
+          ...serverReport,
+          markdown_report: banner + (serverReport.markdown_report || ''),
+          json_packet: {
+            forensic_certificate_65b: section65BCert,
+            ...(serverReport.json_packet || {}),
+          },
+        };
       }
 
       const mdBlob = new Blob([reportData.markdown_report], { type: 'text/markdown;charset=utf-8' });
@@ -538,11 +576,15 @@ export default function App() {
   };
 
   if (showLanding) {
-    return <LandingPage onOpenDashboard={() => {
-      setShowLanding(false);
-      window.history.pushState({}, '', '/dashboard');
-      window.scrollTo(0, 0);
-    }} />;
+    return (
+      <LandingPage
+        onOpenDashboard={() => {
+          setShowLanding(false);
+          window.history.pushState({}, '', '/dashboard');
+          window.scrollTo(0, 0);
+        }}
+      />
+    );
   }
 
   const handleCardClick = (cardId) => {
@@ -573,17 +615,25 @@ export default function App() {
 
       <div className="dashboard-main">
         <Header
+          activeCall={activeCall}
           isMockMode={isMockMode}
           setIsMockMode={handleToggleMockMode}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          provider={provider}
-          backendConnected={backendConnected}
-          theme={theme}
-          setTheme={setTheme}
+          onOpenHardwareWizard={() => setIsHardwareWizardOpen(true)}
+          onOpenLanding={() => {
+            window.history.pushState({}, '', '/');
+            setShowLanding(true);
+          }}
           onOpenHome={() => {
             window.history.pushState({}, '', '/');
             setShowLanding(true);
           }}
+          provider={provider}
+          backendConnected={backendConnected}
+          currentTier={currentTier}
+          storageInfo={storageInfo}
+          theme={theme}
+          setTheme={setTheme}
         />
 
         <DashboardOverview
@@ -616,7 +666,7 @@ export default function App() {
           </div>
 
           {/* Center Column: Voice Forensics & Telemetry Workspace */}
-          <div id="analysis" className="h-full min-h-[520px] flex flex-col">
+          <div id="analysis-panel" className="h-full min-h-[520px] flex flex-col">
             <ForensicsPanel
               activeCall={activeCall}
               onAnalyzeAudioFile={handleAnalyzeAudioFile}
@@ -644,7 +694,7 @@ export default function App() {
         <footer className="dashboard-status-strip">
           <ShieldCheck size={13} />
           <span>Indicative triage signals only · Human verification required</span>
-          <span className="font-mono">VECNA-PULSE / LOCAL WORKSPACE (STATION 04)</span>
+          <span className="font-mono">VECNA-PULSE / 1930 INCIDENT COMMAND (STATION 04)</span>
         </footer>
       </div>
 

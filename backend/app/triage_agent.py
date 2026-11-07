@@ -42,6 +42,21 @@ THREAT_KEYWORDS = {
     "unauthorized": 75,
     "mule account": 65,
     "freeze account": 80,
+    # Hinglish & Indic cybercrime phrases:
+    "paise kat gaye": 88,
+    "paise deduct ho gaye": 88,
+    "digital arrest bol rahe hain": 94,
+    "police bol rahi hai": 80,
+    "screen share karwaya": 85,
+    "app download karne ko bola": 85,
+    "otp bataya tha": 90,
+    "otp maang rahe hain": 90,
+    "video call band mat karo": 92,
+    "trai": 80,
+    "mumbai police": 85,
+    "cyber crime branch": 85,
+    "fedex": 75,
+    "narcotics control bureau": 85,
 }
 
 
@@ -121,6 +136,226 @@ def detect_threat_keywords(text: str) -> List[str]:
     return detected
 
 
+def extract_cyber_entities(text: str) -> Dict[str, Any]:
+    """
+    Extract key cybercrime investigation entities from transcript:
+    - amount: Stolen amount e.g. ₹45,000 or numeric values
+    - mule_upi: Beneficiary UPI ID e.g. cbi.officer.desk@sbi, mule.fastpay@icici
+    - utr_number: 12-digit transaction reference / UTR e.g. UTR-2026-9812-4112
+    - remote_apk: Remote tool (AnyDesk, TeamViewer, RustDesk) with optional session
+    - impersonated_agency: CBI, Mumbai Police, Cyber Crime Branch, TRAI, Customs, FedEx, NCB
+    - caller_phone: Masked or unmasked phone number
+    """
+    if not text:
+        return {
+            "amount": None,
+            "mule_upi": None,
+            "utr_number": None,
+            "remote_apk": None,
+            "impersonated_agency": None,
+            "caller_phone": None,
+        }
+
+    # 1. Amount Extraction
+    amount = None
+    curr_regex1 = r"(?i)(?:₹|rs\.?|inr)\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{2})?|\d+(?:\.\d+)?)\s*(lakh|crore|thousand|k)?"
+    curr_regex2 = r"(?i)(\d{1,3}(?:,\d{2,3})*(?:\.\d{2})?|\d+(?:\.\d+)?)\s*(lakh|crore|thousand|k)?\s*(?:rupees|inr|rs\.?)"
+    curr_regex3 = r"(?i)(?:transfer(?:red)?|deducted|stolen|paid|demanding|extortion|loss|kat gaye|deduct ho gaye)\s*(?:of)?\s*(?:₹|rs\.?|inr)?\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{2})?|\d+)"
+
+    m1 = re.search(curr_regex1, text)
+    m2 = re.search(curr_regex2, text)
+    m3 = re.search(curr_regex3, text)
+
+    if m1:
+        val = m1.group(1).strip()
+        suffix = f" {m1.group(2).strip()}" if m1.group(2) else ""
+        amount = f"₹{val}{suffix}"
+    elif m2:
+        val = m2.group(1).strip()
+        suffix = f" {m2.group(2).strip()}" if m2.group(2) else ""
+        amount = f"₹{val}{suffix}"
+    elif m3 and len(m3.group(1)) >= 3:
+        amount = f"₹{m3.group(1).strip()}"
+
+    # 2. Mule UPI Extraction
+    mule_upi = None
+    upi_pattern = r"(?i)\b([a-zA-Z0-9.\-_]{2,50}@(?!gmail|google|yahoo|outlook|hotmail|proton|icloud|gov\.in|nic\.in)[a-zA-Z0-9_\-]+(?:\.[a-zA-Z0-9_\-]+)?)\b"
+    upi_match = re.search(upi_pattern, text)
+    if upi_match:
+        mule_upi = upi_match.group(1).strip()
+
+    # 3. UTR Number
+    utr_number = None
+    utr_prefix_pattern = r"(?i)\bUTR[-\s:]*([A-Za-z0-9-]{10,24})\b"
+    utr_match = re.search(utr_prefix_pattern, text)
+    if utr_match:
+        raw = utr_match.group(0).strip()
+        utr_number = raw if raw.upper().startswith("UTR") else f"UTR-{utr_match.group(1).strip()}"
+    else:
+        ref_pattern = r"(?i)(?:utr|reference|rrn|txn|transaction\s*(?:id|no|num|ref)?)[-:\s#]*(\d{12})\b"
+        ref_match = re.search(ref_pattern, text)
+        if ref_match:
+            utr_number = f"UTR-{ref_match.group(1).strip()}"
+
+    # 4. Remote APK
+    remote_apk = None
+    remote_tools = ["AnyDesk", "TeamViewer", "RustDesk", "QuickSupport", "Zoho Assist", "ApowerMirror", "AirDroid"]
+    for tool in remote_tools:
+        if re.search(rf"\b{tool}\b", text, re.I):
+            session_match = re.search(rf"(?i){tool}[^.\n]*?(?:session|code|id)?\s*[:#-]?\s*(\d{{3}}[\s-]\d{{3}}[\s-]\d{{3}}|\d{{9,10}})", text)
+            if session_match:
+                remote_apk = f"{tool} (Session: {session_match.group(1).strip()})"
+            elif re.search(r"(?i)quicksupport", text) and "quicksupport" not in tool.lower():
+                remote_apk = f"{tool} QuickSupport APK"
+            elif re.search(r"(?i)apk", text):
+                remote_apk = f"{tool} APK"
+            else:
+                remote_apk = tool
+            break
+
+    if not remote_apk:
+        apk_match = re.search(r"(?i)([a-zA-Z0-9_\- ]{3,25}\s*APK)", text)
+        if apk_match and "download" not in apk_match.group(1).lower():
+            remote_apk = apk_match.group(1).strip()
+
+    # 5. Impersonated Agency
+    impersonated_agency = None
+    agencies = [
+        (r"(?i)\b(CBI|Central Bureau of Investigation)\b", "CBI"),
+        (r"(?i)\b(Mumbai Police)\b", "Mumbai Police"),
+        (r"(?i)\b(Cyber\s*Crime\s*Branch|Cyber\s*Cell|Cyber\s*Police)\b", "Cyber Crime Branch"),
+        (r"(?i)\b(TRAI|Telecom Regulatory Authority)\b", "TRAI"),
+        (r"(?i)\b(Narcotics Control Bureau|NCB)\b", "Narcotics Control Bureau"),
+        (r"(?i)\b(Customs(?:\s*Department)?)\b", "Customs"),
+        (r"(?i)\b(FedEx(?:\s*Security|\s*Courier)?)\b", "FedEx"),
+        (r"(?i)\b(Enforcement Directorate|ED)\b", "Enforcement Directorate"),
+        (r"(?i)\b(Delhi Police)\b", "Delhi Police"),
+        (r"(?i)\b(Police)\b", "Police"),
+    ]
+    for pattern, name in agencies:
+        if re.search(pattern, text):
+            impersonated_agency = name
+            break
+
+    # 6. Caller Phone
+    caller_phone = None
+    if "[REDACTED-PHONE]" in text:
+        caller_phone = "[REDACTED-PHONE]"
+    else:
+        phone_match = re.search(r"(?:(?:\+91|91)[-\s]?)?[6-9]\d{4}[-\s]?\d{5}\b|(?:(?:\+91|91)[-\s]?)?[6-9]\d{9}\b", text)
+        if phone_match:
+            caller_phone = phone_match.group(0).strip()
+
+    return {
+        "amount": amount,
+        "mule_upi": mule_upi,
+        "utr_number": utr_number,
+        "remote_apk": remote_apk,
+        "impersonated_agency": impersonated_agency,
+        "caller_phone": caller_phone,
+    }
+
+
+def detect_scam_attack_stage(
+    text: str = "",
+    threat_keywords: Optional[List[str]] = None,
+    extracted_entities: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Classify Scam Attack Stage (Stages 1 - 4):
+    Stage 1: AUTHORITY IMPERSONATION - Claiming to be police/CBI/TRAI/customs.
+    Stage 2: DIGITAL COERCION - Threatening arrest, illegal parcels, demanding video call isolation.
+    Stage 3: DEVICE INFILTRATION - Screen share, downloading APK / AnyDesk / TeamViewer.
+    Stage 4: ASSET LIQUIDATION - Urgent fund transfer, OTP request, "security verification deposit".
+    """
+    lower = (text or "").lower()
+    kw_list = [k.lower() for k in (threat_keywords or [])]
+    entities = extracted_entities or {}
+
+    is_stage_4 = (
+        bool(entities.get("utr_number"))
+        or bool(entities.get("mule_upi"))
+        or "otp bataya tha" in kw_list
+        or "otp maang rahe hain" in kw_list
+        or "paise kat gaye" in kw_list
+        or "paise deduct ho gaye" in kw_list
+        or "mule account" in kw_list
+        or "cbi.officer.desk@sbi" in lower
+        or "mule.fastpay@icici" in lower
+        or ("otp" in kw_list and any(w in lower for w in ["demanding", "transfer", "deducted", "share"]))
+        or (bool(entities.get("amount")) and any(w in lower for w in ["transfer", "demanding otp", "paid"]))
+    )
+
+    is_stage_3 = (
+        bool(entities.get("remote_apk"))
+        or "screen share karwaya" in kw_list
+        or "app download karne ko bola" in kw_list
+        or any(k in kw_list for k in ["anydesk", "teamviewer", "rustdesk", "quicksupport", "screen share", "apk"])
+        or any(w in lower for w in ["anydesk", "quicksupport", "screen share"])
+    )
+
+    is_stage_2 = (
+        "digital arrest bol rahe hain" in kw_list
+        or "video call band mat karo" in kw_list
+        or any(k in kw_list for k in ["digital arrest", "arrest warrant", "blackmail", "extortion", "webcam", "leak video", "kill myself", "suicide"])
+        or any(w in lower for w in ["blackmail", "extortion", "morphed", "leak video", "digital arrest"])
+    )
+
+    is_stage_1 = (
+        bool(entities.get("impersonated_agency"))
+        or "police bol rahi hai" in kw_list
+        or any(k in kw_list for k in ["cbi", "police", "customs", "trai", "narcotics", "fedex"])
+        or any(w in lower for w in ["cbi", "police", "customs", "trai"])
+    )
+
+    if is_stage_4 and not entities.get("remote_apk"):
+        return {
+            "stage_number": 4,
+            "stage_name": "ASSET LIQUIDATION",
+            "stage_desc": "Urgent fund transfer, OTP request, mule routing, or security verification deposit in progress.",
+            "next_action": "Initiate immediate 1930 NCRP golden-hour freeze on beneficiary accounts and transaction UTR.",
+        }
+
+    if is_stage_3:
+        return {
+            "stage_number": 3,
+            "stage_name": "DEVICE INFILTRATION",
+            "stage_desc": "Screen share, downloading malicious APK, or remote desktop tool (AnyDesk/TeamViewer) active.",
+            "next_action": "Order caller to enable Airplane Mode, disconnect Wi-Fi, and uninstall remote access tools.",
+        }
+
+    if is_stage_4:
+        return {
+            "stage_number": 4,
+            "stage_name": "ASSET LIQUIDATION",
+            "stage_desc": "Urgent fund transfer, OTP request, mule routing, or security verification deposit in progress.",
+            "next_action": "Initiate immediate 1930 NCRP golden-hour freeze on beneficiary accounts and transaction UTR.",
+        }
+
+    if is_stage_2:
+        return {
+            "stage_number": 2,
+            "stage_name": "DIGITAL COERCION",
+            "stage_desc": "Threatening arrest, illegal parcels, video call isolation, or blackmail intimidation.",
+            "next_action": "Instruct caller to immediately disconnect scammer call and do not transfer compromise funds.",
+        }
+
+    if is_stage_1:
+        return {
+            "stage_number": 1,
+            "stage_name": "AUTHORITY IMPERSONATION",
+            "stage_desc": "Claiming to be police, CBI, TRAI, customs, or official courier.",
+            "next_action": "Advise caller law enforcement never conducts inquiries or arrests over phone/video calls.",
+        }
+
+    return {
+        "stage_number": 1,
+        "stage_name": "AUTHORITY IMPERSONATION",
+        "stage_desc": "Initial fraudulent contact or authority impersonation suspicion.",
+        "next_action": "Verify caller credentials and log incoming telephone reference.",
+    }
+
+
 def classify_crime_category(text: str, keywords: List[str]) -> str:
     """Classify the crime category from detected threat keywords and context."""
     if "[Language not supported" in text:
@@ -130,13 +365,13 @@ def classify_crime_category(text: str, keywords: List[str]) -> str:
 
     kw_set = set(k.lower() for k in keywords)
 
-    if any(k in kw_set for k in ["digital arrest", "arrest warrant", "cbi", "police", "customs", "narcotics"]):
+    if any(k in kw_set for k in ["digital arrest", "arrest warrant", "cbi", "police", "customs", "narcotics", "digital arrest bol rahe hain", "police bol rahi hai", "trai", "mumbai police", "cyber crime branch", "fedex", "narcotics control bureau"]):
         return "Digital Arrest Extortion / Impersonation of Law Enforcement"
     elif any(k in kw_set for k in ["blackmail", "extortion", "webcam", "leak video", "suicide", "kill myself"]):
         return "Sextortion / Cyber Blackmail & Intimidation"
-    elif any(k in kw_set for k in ["anydesk", "teamviewer", "rustdesk", "quicksupport", "screen share"]):
+    elif any(k in kw_set for k in ["anydesk", "teamviewer", "rustdesk", "quicksupport", "screen share", "screen share karwaya", "app download karne ko bola"]):
         return "Remote Access Fraud / Device Takeover (AnyDesk/TeamViewer)"
-    elif any(k in kw_set for k in ["otp", "transfer", "money deducted", "upi", "unauthorized"]):
+    elif any(k in kw_set for k in ["otp", "transfer", "money deducted", "upi", "unauthorized", "paise kat gaye", "paise deduct ho gaye", "otp bataya tha", "otp maang rahe hain"]):
         return "Active UPI Fraud / Unauthorized Financial Drain"
     elif "mule account" in kw_set:
         return "Cybercrime Syndicate / Money Mule Account Ring"
@@ -416,6 +651,8 @@ async def generate_triage_insights(
     """
     redacted_text, pii_count = redact_pii(raw_transcript)
     keywords = detect_threat_keywords(raw_transcript)
+    extracted_entities = extract_cyber_entities(raw_transcript)
+    scam_stage = detect_scam_attack_stage(raw_transcript, keywords, extracted_entities)
     crime_category = classify_crime_category(raw_transcript, keywords)
     urgency_score, urgency_level = calculate_urgency(emotion_probs, keywords)
 
@@ -435,6 +672,10 @@ async def generate_triage_insights(
             biomarkers=biomarkers,
             keywords=keywords
         )
+
+    if insights is not None:
+        insights["extracted_entities"] = extracted_entities
+        insights["scam_stage"] = scam_stage
 
     transcript_info = {
         "raw_redacted": redacted_text,
@@ -568,6 +809,8 @@ def format_forensic_case_report(
     actions = insights.get("recommended_actions", [])
     explainability = insights.get("explainability_summary", "Acoustic and keyword metrics combined.")
     disclaimer = insights.get("indicative_disclaimer", INDICATIVE_DISCLAIMER)
+    entities = triage_payload.get("extracted_entities") or insights.get("extracted_entities", {})
+    stage_info = triage_payload.get("scam_stage") or insights.get("scam_stage", {})
 
     timeline = triage_payload.get("timeline_segments", [])
 
@@ -582,8 +825,11 @@ def format_forensic_case_report(
 
 ## 1. Executive Summary & Crime Vector
 - **Classified Vector:** {category}
+- **Scam Attack Stage:** `Stage {stage_info.get('stage_number', 1)}: {stage_info.get('stage_name', 'AUTHORITY IMPERSONATION')}` ({stage_info.get('stage_desc', '')})
+- **Immediate Triage Next Action:** {stage_info.get('next_action', 'N/A')}
 - **Explainability Justification:** {explainability}
 - **Detected Cyber Threat Keywords:** {", ".join([f"`{kw}`" for kw in keywords]) if keywords else "None"}
+- **Extracted Financial & Digital Entities:** Amount: `{entities.get('amount') or 'None'}` | Mule UPI: `{entities.get('mule_upi') or 'None'}` | UTR: `{entities.get('utr_number') or 'None'}` | Remote Tool: `{entities.get('remote_apk') or 'None'}` | Impersonated Agency: `{entities.get('impersonated_agency') or 'None'}` | Caller Phone: `{entities.get('caller_phone') or 'None'}`
 
 ---
 

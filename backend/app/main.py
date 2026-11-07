@@ -247,6 +247,8 @@ async def analyze_audio(
         "emotion_probabilities": emotion_probs,
         "acoustic_biomarkers": biomarkers,
         "transcript": transcript_info,
+        "extracted_entities": triage_insights.get("extracted_entities"),
+        "scam_stage": triage_insights.get("scam_stage"),
         "triage_insights": triage_insights,
         "timeline_segments": timeline,
     }
@@ -330,6 +332,8 @@ async def websocket_live_call(websocket: WebSocket):
                     "emotion_probabilities": ser_result["emotion_probabilities"],
                     "acoustic_biomarkers": ser_result["acoustic_biomarkers"],
                     "transcript": transcript_info,
+                    "extracted_entities": triage_insights.get("extracted_entities"),
+                    "scam_stage": triage_insights.get("scam_stage"),
                     "triage_insights": triage_insights,
                     "timeline_segments": ser_result["timeline_segments"],
                 }

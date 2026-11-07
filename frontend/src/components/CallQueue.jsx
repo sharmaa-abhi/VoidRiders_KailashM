@@ -19,7 +19,8 @@ import {
   ChevronDown,
   Layers,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Activity
 } from 'lucide-react';
 
 export default function CallQueue({
@@ -97,7 +98,7 @@ export default function CallQueue({
       stopMicrophoneStream();
       setMicPermission('standby');
     } else {
-      // Start recording - requests permission ONLY here!
+      // Start recording
       if (!navigator?.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setMicPermission('denied');
         alert('Microphone input is not supported in this browser environment or requires HTTPS/localhost.');
@@ -239,6 +240,32 @@ export default function CallQueue({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const getScamStageBadge = (scamStage) => {
+    let stageNum = 4;
+    if (typeof scamStage === 'object' && scamStage !== null) {
+      stageNum = scamStage.stage_number || 4;
+    } else if (typeof scamStage === 'number') {
+      stageNum = scamStage;
+    }
+    const stages = {
+      1: { label: 'Stage 1 • Impersonation', style: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-400/40' },
+      2: { label: 'Stage 2 • Coercion', style: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-400/40' },
+      3: { label: 'Stage 3 • Infiltration', style: 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-400/40' },
+      4: { label: 'Stage 4 • Liquidation', style: 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-400/40' },
+    };
+    return stages[stageNum] || stages[4];
+  };
+
+  const getCallElapsedTime = (call, index) => {
+    if (call.elapsed_time) return call.elapsed_time;
+    if (call.timestamp_ms) {
+      const diffMin = Math.floor((Date.now() - call.timestamp_ms) / 60000);
+      if (diffMin >= 0 && diffMin <= 120) return `T+${diffMin}m`;
+    }
+    const defaultTiers = ['T+4m', 'T+11m', 'T+24m', 'T+38m'];
+    return defaultTiers[index % defaultTiers.length];
+  };
+
   return (
     <div className="bg-[#FAF9F5] dark:bg-[#111923] border border-[#E2DDD3] dark:border-[#223043] rounded-lg flex flex-col h-full min-h-0 overflow-hidden shadow-sm transition-colors select-none">
       {/* Panel Top Header & Mode Tabs */}
@@ -263,13 +290,14 @@ export default function CallQueue({
                 : 'text-[#647078] dark:text-[#9AA6AC] hover:text-[#111923] dark:hover:text-white'
             }`}
           >
-            Saved ({savedCases.length})
+            Vault ({savedCases.length})
           </button>
         </div>
 
         <div className="flex items-center gap-1.5">
           {isSurgeActive && (
-            <span className="text-[10px] font-mono font-semibold text-[#B33939] dark:text-[#F87171] bg-[#FBEAE9] dark:bg-[#341616] border border-[#F2B8B5] dark:border-[#5A2323] px-2 py-0.5 rounded animate-pulse">
+            <span className="text-[10px] font-mono font-semibold text-[#B33939] dark:text-[#F87171] bg-[#FBEAE9] dark:bg-[#341616] border border-[#F2B8B5] dark:border-[#5A2323] px-2 py-0.5 rounded animate-pulse flex items-center gap-1">
+              <Activity className="w-3 h-3 text-rose-500" />
               SURGE
             </span>
           )}
@@ -408,7 +436,7 @@ export default function CallQueue({
             title="Upload Audio File (WAV)"
           >
             <Upload size={10} />
-            <span>Upload Audio File</span>
+            <span>Upload Audio</span>
           </button>
 
           <button
@@ -424,20 +452,19 @@ export default function CallQueue({
             title="Run Scenario Test"
           >
             <Radio size={10} />
-            <span>Run Scenario Test</span>
+            <span>Scenarios</span>
           </button>
 
-          <button
-            onClick={() => {
-              const el = document.getElementById('decision-support');
-              if (el) el.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className="px-2 py-0.5 rounded border bg-[#F1EFE8] dark:bg-[#182333] text-[#55636B] dark:text-[#9AA6AC] border-[#E2DDD3] dark:border-[#223043] hover:border-[#477F7C] transition-colors flex items-center gap-1"
-            title="View Incident Logs"
-          >
-            <Clock size={10} />
-            <span className="hidden sm:inline">Incident Logs</span>
-          </button>
+          {isMockMode && onSimulateSurge && (
+            <button
+              onClick={onSimulateSurge}
+              className="px-2 py-0.5 rounded border bg-[#FAF3E8] dark:bg-[#261E14] text-[#8C6B3A] dark:text-[#DFBA82] border-[#B18B56]/60 hover:border-[#B18B56] transition-colors flex items-center gap-1 font-semibold"
+              title="Simulate Surge"
+            >
+              <Zap size={10} className="text-[#B18B56]" />
+              <span>Surge</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -519,10 +546,10 @@ export default function CallQueue({
 
           <div className="grid grid-cols-2 gap-1.5 text-xs font-sans">
             {[
-              { id: 'digital_arrest', label: 'Digital Arrest', tag: 'High Fear' },
-              { id: 'upi_fraud', label: 'UPI APK Drain', tag: 'High Distress' },
-              { id: 'distressed_victim', label: 'Sextortion', tag: 'Critical Alert' },
-              { id: 'informant', label: 'Mule Account Tip', tag: 'Moderate' },
+              { id: 'digital_arrest', label: 'Digital Arrest', tag: 'High Fear • Stage 4' },
+              { id: 'upi_fraud', label: 'UPI APK Drain', tag: 'High Distress • Stage 3' },
+              { id: 'distressed_victim', label: 'Sextortion', tag: 'Critical Alert • Stage 2' },
+              { id: 'informant', label: 'Mule Account Tip', tag: 'Moderate • Stage 4' },
             ].map((scen) => (
               <button
                 key={scen.id}
@@ -538,19 +565,6 @@ export default function CallQueue({
               </button>
             ))}
           </div>
-
-          {isMockMode && onSimulateSurge && (
-            <button
-              onClick={() => {
-                onSimulateSurge();
-                setShowScenarioDrawer(false);
-              }}
-              className="w-full py-1.5 px-2 rounded bg-white dark:bg-[#0b1118] border border-[#E2DDD3] dark:border-[#223043] hover:border-[#B18B56] text-xs font-mono text-[#B18B56] flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <Zap size={12} className="text-[#B18B56]" />
-              <span>Simulate Multi-Call Surge</span>
-            </button>
-          )}
         </div>
       )}
 
@@ -569,8 +583,11 @@ export default function CallQueue({
             </p>
           </div>
         ) : (
-          filteredCalls.map((call) => {
+          filteredCalls.map((call, idx) => {
             const isSelected = call.call_id === selectedCallId;
+            const stageInfo = getScamStageBadge(call.scam_stage);
+            const elapsedBadge = getCallElapsedTime(call, idx);
+
             return (
               <div
                 key={call.call_id}
@@ -586,22 +603,42 @@ export default function CallQueue({
                   <div className="absolute top-0 bottom-0 left-0 w-1 bg-[#B18B56] rounded-l" />
                 )}
 
-                {/* Call ID & Urgency Pill */}
+                {/* Call ID, Elapsed Timer & Urgency Pill */}
                 <div className="flex items-center justify-between mb-1 pl-1">
-                  <span className="font-mono text-xs font-bold text-[#111923] dark:text-[#F1EFE8] flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <Phone
                       size={12}
                       className={isSelected ? 'text-[#B18B56]' : 'text-[#8C969E]'}
                     />
-                    {call.call_id}
-                  </span>
+                    <span className="font-mono text-xs font-bold text-[#111923] dark:text-[#F1EFE8] truncate">
+                      {call.call_id}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#F1EFE8] dark:bg-[#182333] text-[#647078] dark:text-[#9AA6AC] border border-[#E2DDD3] dark:border-[#223043]">
+                      <Clock size={10} />
+                      {elapsedBadge}
+                    </span>
+                  </div>
 
                   <span
-                    className={`text-[9px] font-mono font-semibold px-2 py-0.5 rounded border ${getUrgencyBadge(
+                    className={`text-[9px] font-mono font-semibold px-2 py-0.5 rounded border whitespace-nowrap shrink-0 ${getUrgencyBadge(
                       call.urgency_level
                     )}`}
                   >
                     {call.urgency_score} · {call.urgency_level}
+                  </span>
+                </div>
+
+                {/* Row 2: Scam Stage Pill + Emotion State */}
+                <div className="flex items-center justify-between gap-2 mb-1 pl-1">
+                  <span
+                    className={`text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full border truncate ${stageInfo.style}`}
+                  >
+                    {stageInfo.label}
+                  </span>
+
+                  <span className="text-[10px] font-mono text-[#647078] dark:text-[#9AA6AC] flex items-center gap-1 shrink-0">
+                    <Volume2 size={11} className="text-[#8C969E]" />
+                    <span className="capitalize">{call.dominant_emotion || 'neutral'}</span>
                   </span>
                 </div>
 
@@ -610,36 +647,18 @@ export default function CallQueue({
                   {call.caller_tag}
                 </p>
 
-                {/* State & Metrics row */}
-                <div className="space-y-1.5 pl-1">
-                  <div className="flex items-center justify-between text-[11px] text-[#647078] dark:text-[#8C969E]">
-                    <span className="flex items-center gap-1">
-                      <Volume2 size={11} className="text-[#8C969E]" />
-                      <span className="font-mono text-[10px]">
-                        State:{' '}
-                        <strong className="text-[#111923] dark:text-[#F1EFE8] capitalize font-medium">
-                          {call.dominant_emotion || 'neutral'}
-                        </strong>
-                      </span>
-                    </span>
-                    <span className="font-mono text-[10px] text-[#8C969E]">
-                      {formatTimestamp(call.timestamp_ms)}
-                    </span>
-                  </div>
-
-                  {/* Urgency Progress Bar */}
-                  <div className="w-full bg-[#E2DDD3] dark:bg-[#1E293B] rounded-full h-1 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        call.urgency_score >= 80
-                          ? 'bg-[#B33939]'
-                          : call.urgency_score >= 60
-                          ? 'bg-[#B18B56]'
-                          : 'bg-[#477F7C]'
-                      }`}
-                      style={{ width: `${call.urgency_score}%` }}
-                    />
-                  </div>
+                {/* Urgency Progress Bar */}
+                <div className="w-full bg-[#E2DDD3] dark:bg-[#1E293B] rounded-full h-1 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      call.urgency_score >= 80
+                        ? 'bg-[#B33939]'
+                        : call.urgency_score >= 60
+                        ? 'bg-[#B18B56]'
+                        : 'bg-[#477F7C]'
+                    }`}
+                    style={{ width: `${call.urgency_score}%` }}
+                  />
                 </div>
 
                 {/* Delete button for saved cases */}
